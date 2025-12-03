@@ -23,8 +23,13 @@
 - **Validity:** Until 2053-04-20
 - **Algorithm:** RSA 2048-bit, SHA256withRSA
 
+## Privacy Policy
+**URL:** https://sites.google.com/view/mantramala-privacy/
+**Hosted on:** Google Sites
+**Status:** ✅ Live and accessible
+
 ## Next Actions
-1. [ ] Host privacy policy and get URL
+1. [x] Host privacy policy and get URL
 2. [ ] Create app listing in Play Console
 3. [ ] Upload signed AAB (app-release.aab)
 4. [ ] Complete store listing content

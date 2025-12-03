@@ -80,8 +80,8 @@
 - [x] Feature graphic created (1024x500px)
 - [x] App icon set (adaptive with black background)
 - [x] Privacy policy drafted (see PRIVACY_POLICY.md)
-- [ ] Privacy policy hosted online (URL required)
-- [ ] Play Console account created ($25 one-time fee)
+- [x] Privacy policy hosted online (https://sites.google.com/view/mantramala-privacy/)
+- [x] Play Console account created (ID: 5025783351476242242)
 
 ### Store Listing Content (from STORE_LISTING.md)
 - **App Name:** MantraMala
