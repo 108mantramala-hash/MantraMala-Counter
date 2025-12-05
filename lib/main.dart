@@ -1,9 +1,12 @@
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:just_audio/just_audio.dart";
+import "package:audio_session/audio_session.dart";
 import "package:shared_preferences/shared_preferences.dart";
+import "package:in_app_review/in_app_review.dart";
 import "dart:math" as math;
 import "dart:async";
+import "package:url_launcher/url_launcher.dart";
 
 void main() {
   runApp(const MantraMalaApp());
@@ -74,6 +77,8 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
   // Disable tap sound globally (tab.mp3)
   bool _tapClickSoundEnabled = false;
   int _defaultTarget = 108;
+  DateTime? _firstLaunchDate;
+  bool _hasAskedForReview = false;
 
   final List<int> presets = [27, 54, 108];
 
@@ -94,25 +99,41 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
   }
 
   Future<void> _initializeAudio() async {
+    // Configure audio session to prevent Live Caption notifications
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.ambient,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.none,
+      ));
+    } catch (_) {
+      // Audio session configuration failed, continue anyway
+    }
+    
     // Initialize players and attempt to preload assets if present
     _tapPlayer = AudioPlayer();
     _bellPlayer = AudioPlayer();
     try {
+      // Set audio source; if assets are missing/invalid, fallback will be used
+      await _tapPlayer.setAudioSource(AudioSource.asset("assets/sounds/tab.mp3")).catchError((_) => Duration.zero);
+      await _bellPlayer.setAudioSource(AudioSource.asset("assets/sounds/Bell.mp3")).catchError((_) => Duration.zero);
       await _tapPlayer.setVolume(_volume);
       await _bellPlayer.setVolume(_volume);
-      // Try set asset sources; if assets are missing/invalid, fallback will be used
-      try {
-        // Load the correct asset (pubspec lists assets/sounds/tab.mp3)
-        await _tapPlayer.setAudioSource(AudioSource.asset("assets/sounds/tab.mp3"));
-      } catch (_) {}
-      try {
-        await _bellPlayer.setAudioSource(AudioSource.asset("assets/sounds/bell.mp3"));
-      } catch (_) {}
     } catch (_) {}
   }
 
   Future<void> _loadData() async {
     _prefs = await SharedPreferences.getInstance();
+    
+    // Review tracking - initialize first launch date
+    final firstLaunchMs = _prefs.getInt("firstLaunchDate");
+    if (firstLaunchMs == null) {
+      _firstLaunchDate = DateTime.now();
+      await _prefs.setInt("firstLaunchDate", _firstLaunchDate!.millisecondsSinceEpoch);
+    } else {
+      _firstLaunchDate = DateTime.fromMillisecondsSinceEpoch(firstLaunchMs);
+    }
+    
     setState(() {
       _currentCount = _prefs.getInt("currentCount") ?? 0;
       _targetCount = _prefs.getInt("targetCount") ?? 108;
@@ -124,7 +145,9 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
       _hapticsEnabled = _prefs.getBool("hapticsEnabled") ?? true;
       _tapAnywhere = _prefs.getBool("tapAnywhere") ?? false;
       _defaultTarget = _prefs.getInt("defaultTarget") ?? 108;
-      // If app just opened and currentCount is zero, apply default target
+      _hasAskedForReview = _prefs.getBool("hasAskedForReview") ?? false;
+      // Set target to default (108) on first install or when count is zero
+      _targetCount = _prefs.getInt("targetCount") ?? 108;
       if (_currentCount == 0) {
         _targetCount = _defaultTarget;
       }
@@ -146,6 +169,31 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
     await _prefs.setBool("hapticsEnabled", _hapticsEnabled);
     await _prefs.setBool("tapAnywhere", _tapAnywhere);
     await _prefs.setInt("defaultTarget", _defaultTarget);
+    await _prefs.setBool("hasAskedForReview", _hasAskedForReview);
+  }
+
+  Future<void> _checkAndRequestReview() async {
+    // Only ask once
+    if (_hasAskedForReview) return;
+    
+    // Check if 3 days have passed since first launch
+    if (_firstLaunchDate == null) return;
+    final daysSinceInstall = DateTime.now().difference(_firstLaunchDate!).inDays;
+    if (daysSinceInstall < 3) return;
+    
+    // Check if user has counted at least 10 mantras
+    if (_totalMantras < 10) return;
+    
+    try {
+      final InAppReview inAppReview = InAppReview.instance;
+      if (await inAppReview.isAvailable()) {
+        await inAppReview.requestReview();
+        _hasAskedForReview = true;
+        await _saveData();
+      }
+    } catch (e) {
+      // Silently fail - review request is not critical
+    }
   }
 
   Future<void> _playTapSound() async {
@@ -164,16 +212,29 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
     }
   }
 
-  void _startCompletionSoundLoop() {
-    // Completion sound disabled for v1.0
-    return;
-  }
-
   void _stopCompletionSoundLoop() {
     _completionSoundTimer?.cancel();
     _completionSoundStopTimer?.cancel();
     // Re-disable tap click sound after completion window
     _tapClickSoundEnabled = false;
+  }
+
+  Future<void> _playCompletionSound() async {
+    if (!_soundEnabled) return;
+    try {
+      // Try to play the bell sound
+      await _bellPlayer.seek(Duration.zero);
+      await _bellPlayer.play();
+    } catch (e) {
+      // If playing fails, try to reload and play
+      try {
+        await _bellPlayer.setAudioSource(AudioSource.asset("assets/sounds/Bell.mp3"));
+        await _bellPlayer.setVolume(_volume);
+        await _bellPlayer.play();
+      } catch (_) {
+        // Silently fail if sound playback fails
+      }
+    }
   }
 
   void _setTarget(int target) {
@@ -187,28 +248,41 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
 
   void _incrementCounter() {
     if (!_isCompleted) {
+      final bool willComplete = (_currentCount + 1) >= _targetCount;
+      
       setState(() {
         _currentCount++;
         _totalMantras++;
         if (_currentCount >= _targetCount) {
           _isCompleted = true;
-          // Strong haptic feedback when target is reached
-          if (_hapticsEnabled) HapticFeedback.heavyImpact();
-          // Only enable tab.mp3 after the UI shows green status.
-          // Schedule the loop to start after the current frame.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _isCompleted) {
-              _startCompletionSoundLoop();
-            }
-          });
           _showCompletionSheet();
-        } else {
-          // Light tap haptic feedback on each count
-          if (_hapticsEnabled) HapticFeedback.lightImpact();
-          _playTapSound();
+          // Play completion sound once
+          _playCompletionSound();
         }
       });
+      
+      // Haptic feedback and sound/vibration
+      if (willComplete) {
+        // Strong vibration pattern on completion
+        if (_hapticsEnabled) {
+          HapticFeedback.heavyImpact();
+          Future.delayed(const Duration(milliseconds: 200), () {
+            if (mounted && _hapticsEnabled) HapticFeedback.mediumImpact();
+          });
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (mounted && _hapticsEnabled) HapticFeedback.mediumImpact();
+          });
+        }
+      } else {
+        // Light tap haptic feedback on each count
+        if (_hapticsEnabled) HapticFeedback.lightImpact();
+        _playTapSound();
+      }
+      
       _saveData();
+      
+      // Check if we should request a review
+      _checkAndRequestReview();
     }
   }
 
@@ -293,18 +367,18 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
                         label: const Text("Increase Target"),
                       ),
                     ),
+                  if (_targetCount >= _defaultTarget)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          _stopCompletionSoundLoop();
+                          Navigator.of(ctx).pop();
+                        },
+                        icon: const Icon(Icons.close, size: 24),
+                        label: const Text("Done"),
+                      ),
+                    ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () {
-                    _stopCompletionSoundLoop();
-                    Navigator.of(ctx).pop();
-                  },
-                  child: const Text("Close"),
-                ),
               ),
             ],
           ),
@@ -380,7 +454,6 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
                   hapticsEnabled: _hapticsEnabled,
                   tapAnywhere: _tapAnywhere,
                   defaultTarget: _defaultTarget,
-                  presets: presets,
                   onChanged: (s) async {
                     setState(() {
                       _volume = s.volume;
@@ -440,16 +513,14 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                 _buildStatsBar(context, screenWidth),
+                SizedBox(height: screenHeight * 0.04),
+                _buildCircularCounter(context, screenWidth * 1.1),
                 SizedBox(height: screenHeight * 0.03),
-                _buildPresetButtons(context, screenWidth),
-                SizedBox(height: screenHeight * 0.03),
-                _buildCircularCounter(context, screenWidth),
+                _buildResetButton(context, screenWidth * 0.35),
+                SizedBox(height: screenHeight * 0.02),
+                _buildTapButton(context, screenWidth * 0.9),
                 SizedBox(height: screenHeight * 0.02),
                 _buildStatusText(context),
-                SizedBox(height: screenHeight * 0.02),
-                _buildTapButton(context, screenWidth),
-                SizedBox(height: screenHeight * 0.015),
-                _buildResetButton(context, screenWidth),
               ],
               ),
             ),
@@ -462,73 +533,78 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
 
   Widget _buildStatsBar(BuildContext context, double screenWidth) {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF3A3C58).withValues(alpha: 0.4),
-            const Color(0xFF2A2C48).withValues(alpha: 0.6),
+            Color(0xFF3A3C4E),
+            Color(0xFF2A2C3E),
           ],
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            spreadRadius: -5,
-            offset: const Offset(0, 10),
+            color: const Color(0xFF000000).withValues(alpha: 0.5),
+            blurRadius: 24,
+            spreadRadius: 0,
+            offset: const Offset(0, 12),
+          ),
+          BoxShadow(
+            color: const Color(0xFF1A1C2E).withValues(alpha: 0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
         border: Border.all(
-          color: const Color(0xFF4A4C6E).withValues(alpha: 0.3),
-          width: 1,
+          color: const Color(0xFF4A4C5E).withValues(alpha: 0.4),
+          width: 1.5,
         ),
       ),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          gradient: RadialGradient(
-            center: Alignment.topLeft,
-            radius: 2.0,
+          borderRadius: BorderRadius.circular(22),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF2A2C48),
-              const Color(0xFF1C1E3A),
-              const Color(0xFF14162A),
+              const Color(0xFF262835).withValues(alpha: 0.8),
+              const Color(0xFF1A1C2E).withValues(alpha: 0.95),
             ],
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             Expanded(
               child: _buildStatItem(
                 context,
-                "Total Mantras",
+                "Total Count",
                 _totalMantras.toString(),
               ),
             ),
             Container(
-              width: 1.5,
-              height: 50,
+              width: 2,
+              height: 56,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.transparent,
-                    const Color(0xFF4A4C6E).withValues(alpha: 0.5),
+                    const Color(0xFF4A4C5E).withValues(alpha: 0.6),
                     Colors.transparent,
                   ],
                 ),
+                borderRadius: BorderRadius.circular(1),
               ),
             ),
             Expanded(
               child: _buildStatItem(
                 context,
-                "Today's Target",
+                "Target",
                 _targetCount.toString(),
               ),
             ),
@@ -540,184 +616,70 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
 
   Widget _buildStatItem(BuildContext context, String label, String value) {
     return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
-            color: const Color(0xFFA0A0A8).withValues(alpha: 0.7),
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.8,
+            fontSize: 12,
+            color: const Color(0xFF9A9CA8).withValues(alpha: 0.8),
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.9,
           ),
         ),
-        const SizedBox(height: 8),
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFD96A),
-              Color(0xFFD6A54B),
-            ],
-          ).createShader(bounds),
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              shadows: [
-                Shadow(
-                  color: Color(0x60000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 3),
-                ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF3A3C4E),
+                Color(0xFF2A2C3E),
               ],
             ),
+            border: Border.all(
+              color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD96A).withValues(alpha: 0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPresetButtons(BuildContext context, double screenWidth) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      alignment: WrapAlignment.center,
-      children: presets.map((preset) => _buildPresetButton(context, preset, screenWidth)).toList(),
-    );
-  }
-
-  Widget _buildPresetButton(BuildContext context, int preset, double screenWidth) {
-    final isActive = _targetCount == preset;
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: const Color(0xFFD6A54B).withValues(alpha: 0.4),
-                  blurRadius: 16,
-                  spreadRadius: 1,
-                  offset: const Offset(0, 6),
-                ),
-                BoxShadow(
-                  color: const Color(0xFFFFD96A).withValues(alpha: 0.2),
-                  blurRadius: 24,
-                  spreadRadius: -2,
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 12,
-                  spreadRadius: -3,
-                  offset: const Offset(0, 6),
-                ),
+          child: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFFFE55C),
+                Color(0xFFD6A54B),
               ],
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          gradient: isActive
-              ? const LinearGradient(
-                  colors: [
-                    Color(0xFFFFD96A),
-                    Color(0xFFD6A54B),
-                    Color(0xFFB8873D),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : RadialGradient(
-                  center: Alignment.topLeft,
-                  radius: 2.0,
-                  colors: [
-                    const Color(0xFF3A3C58).withValues(alpha: 0.6),
-                    const Color(0xFF2A2C48),
-                    const Color(0xFF1C1E3A),
-                  ],
-                ),
-          border: Border.all(
-            color: isActive
-                ? const Color(0xFFFFD96A).withValues(alpha: 0.5)
-                : const Color(0xFF4A4C6E).withValues(alpha: 0.3),
-            width: isActive ? 2 : 1,
-          ),
-        ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(17),
-            gradient: isActive
-                ? LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.2),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.5],
-                  )
-                : null,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                if (_isCompleted) _stopCompletionSoundLoop();
-                _setTarget(preset);
-              },
-              borderRadius: BorderRadius.circular(17),
-              splashColor: isActive
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : const Color(0xFFD6A54B).withValues(alpha: 0.1),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                child: ShaderMask(
-                  shaderCallback: (bounds) => isActive
-                      ? const LinearGradient(
-                          colors: [
-                            Color(0xFF1C1E3A),
-                            Color(0xFF0A0B1A),
-                          ],
-                        ).createShader(bounds)
-                      : const LinearGradient(
-                          colors: [
-                            Color(0xFFFFD96A),
-                            Color(0xFFD6A54B),
-                          ],
-                        ).createShader(bounds),
-                  child: Text(
-                    preset.toString(),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                      shadows: isActive
-                          ? [
-                              const Shadow(
-                                color: Color(0x40000000),
-                                blurRadius: 4,
-                                offset: Offset(0, 2),
-                              ),
-                            ]
-                          : [
-                              Shadow(
-                                color: const Color(0xFFD6A54B).withValues(alpha: 0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 0),
-                              ),
-                            ],
-                    ),
+            ).createShader(bounds),
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 0.5,
+                shadows: [
+                  Shadow(
+                    color: Color(0x70000000),
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
                   ),
-                ),
+                ],
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -921,22 +883,7 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
             Color(0xFF4CAF50),
           ],
         ).createShader(bounds),
-        child: Text(
-          "Target Complete ✓",
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-            shadows: [
-              Shadow(
-                color: Color(0x404CAF50),
-                blurRadius: 12,
-                offset: Offset(0, 0),
-              ),
-            ],
-          ),
-        ),
+        child: const SizedBox.shrink(),
       );
     }
     return const SizedBox.shrink();
@@ -945,98 +892,127 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
   Widget _buildTapButton(BuildContext context, double screenWidth) {
     return Center(
       child: Container(
-        width: screenWidth * 0.8,
-        height: 70,
+        width: screenWidth * 0.85,
+        height: 72,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(35),
+          borderRadius: BorderRadius.circular(36),
           gradient: _isCompleted
               ? LinearGradient(
                   colors: [
-                    const Color(0xFF3A3C4E).withValues(alpha: 0.8),
-                    const Color(0xFF2A2C48).withValues(alpha: 0.8),
+                    const Color(0xFF3A3C4E).withValues(alpha: 0.9),
+                    const Color(0xFF2A2C48).withValues(alpha: 0.9),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
               : const LinearGradient(
                   colors: [
-                    Color(0xFFFFD96A),
-                    Color(0xFFD6A54B),
-                    Color(0xFFB8873D),
+                    Color(0xFFFFE55C),
+                    Color(0xFFE5B84D),
+                    Color(0xFFC4934D),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   stops: [0.0, 0.5, 1.0],
                 ),
           boxShadow: _isCompleted
-              ? null
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF000000).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
               : [
                   BoxShadow(
-                    color: const Color(0xFFD6A54B).withValues(alpha: 0.5),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 8),
+                    color: const Color(0xFFFFD96A).withValues(alpha: 0.7),
+                    blurRadius: 28,
+                    spreadRadius: 3,
+                    offset: const Offset(0, 10),
                   ),
                   BoxShadow(
-                    color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
-                    blurRadius: 30,
-                    spreadRadius: -5,
+                    color: const Color(0xFFFFE55C).withValues(alpha: 0.4),
+                    blurRadius: 40,
+                    spreadRadius: -8,
                     offset: const Offset(0, 0),
                   ),
                 ],
+          border: _isCompleted
+              ? Border.all(color: const Color(0xFF3A3C4E), width: 1.5)
+              : Border.all(
+                  color: const Color(0xFFFFF8E7).withValues(alpha: 0.5),
+                  width: 2,
+                ),
         ),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(35),
+            borderRadius: BorderRadius.circular(36),
             gradient: _isCompleted
                 ? null
                 : LinearGradient(
                     colors: [
-                      Colors.white.withValues(alpha: 0.15),
-                      Colors.transparent,
+                      Colors.white.withValues(alpha: 0.25),
+                      Colors.white.withValues(alpha: 0.05),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.5],
+                    stops: const [0.0, 0.6],
                   ),
           ),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: _isCompleted ? null : _incrementCounter,
-              borderRadius: BorderRadius.circular(35),
-              splashColor: Colors.white.withValues(alpha: 0.2),
-              highlightColor: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(36),
+              splashColor: Colors.white.withValues(alpha: 0.3),
+              highlightColor: Colors.white.withValues(alpha: 0.15),
               child: Center(
-                child: ShaderMask(
-                  shaderCallback: (bounds) => _isCompleted
-                      ? const LinearGradient(
-                          colors: [Color(0xFFA0A0A8), Color(0xFFA0A0A8)],
-                        ).createShader(bounds)
-                      : const LinearGradient(
-                          colors: [
-                            Color(0xFF1C1E3A),
-                            Color(0xFF0A0B1A),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        ).createShader(bounds),
-                  child: Text(
-                    _isCompleted ? "Completed ✓" : "Tap to Count",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                      shadows: [
-                        Shadow(
-                          color: Color(0x40000000),
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.touch_app,
+                      size: 28,
+                      color: _isCompleted ? const Color(0xFFA0A0A8) : const Color(0xFF1C1E3A),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    ShaderMask(
+                      shaderCallback: (bounds) => _isCompleted
+                          ? const LinearGradient(
+                              colors: [Color(0xFFA0A0A8), Color(0xFFA0A0A8)],
+                            ).createShader(bounds)
+                          : const LinearGradient(
+                              colors: [
+                                Color(0xFF1C1E3A),
+                                Color(0xFF0A0B1A),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ).createShader(bounds),
+                      child: Text(
+                        _isCompleted ? "Completed ✓" : "Tap to Count",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                          shadows: [
+                            Shadow(
+                              color: Color(0x60000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 3),
+                            ),
+                            Shadow(
+                              color: Color(0x30000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1049,13 +1025,33 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
   Widget _buildResetButton(BuildContext context, double screenWidth) {
     return Center(
       child: Container(
-        width: screenWidth * 0.6,
-        height: 54,
+        width: screenWidth * 0.5,
+        height: screenWidth * 0.5,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(27),
-          color: const Color(0xFF2A2C48),
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF2A2C48),
+              Color(0xFF1F2131),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF000000).withValues(alpha: 0.6),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: const Color(0xFF000000).withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
           border: Border.all(
-            color: const Color(0xFF3A3C4E),
+            color: const Color(0xFF3A3C4E).withValues(alpha: 0.6),
             width: 1.5,
           ),
         ),
@@ -1066,26 +1062,15 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
               if (_isCompleted) _stopCompletionSoundLoop();
               _resetCounter();
             },
-            borderRadius: BorderRadius.circular(27),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.restart_alt,
-                  size: 20,
-                  color: Color(0xFFF8F5F0),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  "Reset",
-                  style: TextStyle(
-                    color: const Color(0xFFF8F5F0),
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
+            borderRadius: BorderRadius.circular(screenWidth / 2),
+            splashColor: Colors.white.withValues(alpha: 0.2),
+            highlightColor: Colors.white.withValues(alpha: 0.1),
+            child: const Center(
+              child: Icon(
+                Icons.refresh,
+                size: 24,
+                color: Color(0xFFF8F5F0),
+              ),
             ),
           ),
         ),
@@ -1116,7 +1101,6 @@ class SettingsPage extends StatefulWidget {
   final bool hapticsEnabled;
   final bool tapAnywhere;
   final int defaultTarget;
-  final List<int> presets;
   final Future<void> Function(SettingsData) onChanged;
   final Future<void> Function() onResetTotalMantras;
   final Future<void> Function() onResetTodaysTarget;
@@ -1128,7 +1112,6 @@ class SettingsPage extends StatefulWidget {
     required this.hapticsEnabled,
     required this.tapAnywhere,
     required this.defaultTarget,
-    required this.presets,
     required this.onChanged,
     required this.onResetTotalMantras,
     required this.onResetTodaysTarget,
@@ -1144,6 +1127,10 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _hapticsEnabled;
   late bool _tapAnywhere;
   late int _defaultTarget;
+  late FixedExtentScrollController _thousandsController;
+  late FixedExtentScrollController _hundredsController;
+  late FixedExtentScrollController _tensController;
+  late FixedExtentScrollController _onesController;
 
   @override
   void initState() {
@@ -1153,30 +1140,256 @@ class _SettingsPageState extends State<SettingsPage> {
     _hapticsEnabled = widget.hapticsEnabled;
     _tapAnywhere = widget.tapAnywhere;
     _defaultTarget = widget.defaultTarget;
+    
+    // Initialize scroll controllers to current target value
+    _thousandsController = FixedExtentScrollController(initialItem: (_defaultTarget ~/ 1000) % 2);
+    _hundredsController = FixedExtentScrollController(initialItem: (_defaultTarget ~/ 100) % 10);
+    _tensController = FixedExtentScrollController(initialItem: (_defaultTarget ~/ 10) % 10);
+    _onesController = FixedExtentScrollController(initialItem: _defaultTarget % 10);
+  }
+
+  @override
+  void dispose() {
+    _thousandsController.dispose();
+    _hundredsController.dispose();
+    _tensController.dispose();
+    _onesController.dispose();
+    super.dispose();
+  }
+
+  void _updateTargetFromPickers() {
+    final thousands = _thousandsController.selectedItem % 2; // 0-1 only
+    final hundreds = _hundredsController.selectedItem % 10;
+    final tens = _tensController.selectedItem % 10;
+    final ones = _onesController.selectedItem % 10;
+    final newTarget = (thousands * 1000) + (hundreds * 100) + (tens * 10) + ones;
+    // Cap at 1008 and ensure minimum is 1
+    final cappedTarget = newTarget > 1008 ? 1008 : (newTarget == 0 ? 1 : newTarget);
+    setState(() => _defaultTarget = cappedTarget);
+  }
+
+  Widget _buildNumberWheel(FixedExtentScrollController controller, String label, {int maxDigit = 9}) {
+    final digitCount = maxDigit + 1;
+    return Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 5,
+            color: Color(0xFFA0A0A8),
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          height: 67,
+          width: 34,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2A2C48), Color(0xFF1F2131)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(
+              color: const Color(0xFFFFD96A).withValues(alpha: 0.2),
+              width: 0.7,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Selection highlight in center
+              Center(
+                child: Container(
+                  height: 22,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFFFD96A).withValues(alpha: 0.15),
+                        const Color(0xFFFFD96A).withValues(alpha: 0.25),
+                        const Color(0xFFFFD96A).withValues(alpha: 0.15),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              // Number wheel
+              ListWheelScrollView.useDelegate(
+                controller: controller,
+                itemExtent: 22,
+                diameterRatio: 1.5,
+                physics: const FixedExtentScrollPhysics(),
+                perspective: 0.003,
+                onSelectedItemChanged: (_) => _updateTargetFromPickers(),
+                childDelegate: ListWheelChildLoopingListDelegate(
+                  children: List.generate(digitCount, (index) {
+                    return Center(
+                      child: Text(
+                        index.toString(),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFFFD96A),
+                          height: 1.0,
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Settings")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Default Target", style: Theme.of(context).textTheme.displayMedium),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFD96A), Color(0xFFD6A54B), Color(0xFFB8873D)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD96A).withValues(alpha: 0.4),
+                      blurRadius: 15,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  "Set Your Target",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF1C1E3A),
+                    letterSpacing: 1.5,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        offset: const Offset(0, 2),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: widget.presets.map((p) {
-                final active = p == _defaultTarget;
-                return ChoiceChip(
-                  label: Text(p.toString()),
-                  selected: active,
-                  onSelected: (_) => setState(() => _defaultTarget = p),
-                );
-              }).toList(),
+            Center(
+              child: Text(
+                "Scroll the wheels to set your daily target",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: const Color(0xFFA0A0A8).withValues(alpha: 0.9),
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Rolling Number Picker (Slot Machine Style)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF262835), Color(0xFF1A1C2E)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD96A).withValues(alpha: 0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 7,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Current Target Display
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFD96A), Color(0xFFD6A54B)],
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _defaultTarget.toString().padLeft(4, '0'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1C1E3A),
+                          letterSpacing: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Rolling Number Wheels
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildNumberWheel(_thousandsController, "1000s", maxDigit: 1),
+                        const SizedBox(width: 5),
+                        _buildNumberWheel(_hundredsController, "100s"),
+                        const SizedBox(width: 5),
+                        _buildNumberWheel(_tensController, "10s"),
+                        const SizedBox(width: 5),
+                        _buildNumberWheel(_onesController, "1s", maxDigit: 8),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Scroll to select target (1-1008)",
+                      style: TextStyle(
+                        fontSize: 6,
+                        color: const Color(0xFFA0A0A8).withValues(alpha: 0.7),
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 24),
             Row(children: [
@@ -1185,15 +1398,77 @@ class _SettingsPageState extends State<SettingsPage> {
               const Text("Enable Sound"),
             ]),
             Row(children: [
-              Switch(value: _hapticsEnabled, onChanged: (v) => setState(() => _hapticsEnabled = v)),
-              const SizedBox(width: 8),
-              const Text("Enable Haptics"),
-            ]),
-            Row(children: [
               Switch(value: _tapAnywhere, onChanged: (v) => setState(() => _tapAnywhere = v)),
               const SizedBox(width: 8),
               const Text("Tap Anywhere to Count"),
             ]),
+            const SizedBox(height: 20),
+            // Donation Button (UPI for India, Ko-fi for International)
+            Center(
+              child: Builder(
+                builder: (context) {
+                  final isIndianUser = Localizations.localeOf(context).countryCode == 'IN';
+                  
+                  return Container(
+                    width: MediaQuery.of(context).size.width * 0.85,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4A90E2).withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          if (isIndianUser) {
+                            // UPI Payment for Indian users
+                            // Replace with your UPI ID: yourname@paytm / yourname@okaxis / yourphone@ybl
+                            final upiUrl = Uri.parse('upi://pay?pa=6472084641@icici&pn=MantraMala&cu=INR');
+                            if (await canLaunchUrl(upiUrl)) {
+                              await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
+                            }
+                          } else {
+                            // Ko-fi for International users
+                            // Replace with your Ko-fi username
+                            final kofiUrl = Uri.parse('https://ko-fi.com/mantramala');
+                            if (await canLaunchUrl(kofiUrl)) {
+                              await launchUrl(kofiUrl, mode: LaunchMode.externalApplication);
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.volunteer_activism, size: 22, color: Color(0xFFFF4444)),
+                            SizedBox(width: 10),
+                            Text(
+                              "Support Us to Build Better",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 16),
             Text("Volume", style: Theme.of(context).textTheme.bodyLarge),
             Slider(
@@ -1204,7 +1479,7 @@ class _SettingsPageState extends State<SettingsPage> {
               label: (_volume * 100).round().toString(),
               onChanged: (v) => setState(() => _volume = v),
             ),
-            const Spacer(),
+            const SizedBox(height: 24),
             // Save Button
             Center(
               child: Container(
@@ -1328,6 +1603,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
       ),
+    ),
     );
   }
 }
