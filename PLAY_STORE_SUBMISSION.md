@@ -8,7 +8,7 @@
 
 **Privacy Policy URL:** https://sites.google.com/view/mantramala-privacy/  
 **Developer Account:** https://play.google.com/console/u/0/developers/5025783351476242242  
-**App Bundle Location:** `build\app\outputs\bundle\release\app-release.aab` (42.79 MB)
+**App Bundle Location:** `releases\2025-12-06\v1.0.5\app-release-v1.0.5.aab` (43.1 MB)
 
 ---
 
@@ -16,13 +16,16 @@
 
 **Package Name:** com.mantramala.app  
 **App Name:** MantraMala  
-**Version:** 1.0.1 (Version Code: 2)  
+**Version:** 1.0.5 (Version Code: 6)  
 **Category:** Lifestyle  
 **Price:** Free  
 **Ads:** No
 
-**Latest Changes (v1.0.1):**
-- Added in-app review prompt after 3 days of use with 10+ mantras counted
+**Latest Changes (v1.0.5):**
+- Fixed: Bell sound now plays consistently on every target completion
+- Fixed: Session complete popup appears reliably every time
+- Improved: Cleaner settings interface with better visibility
+- Enhanced: More readable instruction text throughout the app
 
 ---
 

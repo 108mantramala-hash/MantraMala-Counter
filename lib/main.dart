@@ -69,7 +69,6 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
   Timer? _completionSoundTimer;
   Timer? _completionSoundStopTimer;
   int _totalMantras = 0; // All-time mantra count
-  //String _lastSessionDate = "2025-12-01";
   double _volume = 0.8; // 0.0 - 1.0
   bool _soundEnabled = true;
   bool _hapticsEnabled = true;
@@ -139,7 +138,6 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
       _targetCount = _prefs.getInt("targetCount") ?? 108;
       _isCompleted = _prefs.getBool("isCompleted") ?? false;
       _totalMantras = _prefs.getInt("totalMantras") ?? 0;
-     // _lastSessionDate = _prefs.getString("lastSessionDate") ?? "";
       _volume = _prefs.getDouble("volume") ?? 0.8;
       _soundEnabled = _prefs.getBool("soundEnabled") ?? true;
       _hapticsEnabled = _prefs.getBool("hapticsEnabled") ?? true;
@@ -163,7 +161,6 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
     await _prefs.setInt("targetCount", _targetCount);
     await _prefs.setBool("isCompleted", _isCompleted);
     await _prefs.setInt("totalMantras", _totalMantras);
-    await _prefs.setString("lastSessionDate", DateTime.now().toString().split(" ")[0]);
     await _prefs.setDouble("volume", _volume);
     await _prefs.setBool("soundEnabled", _soundEnabled);
     await _prefs.setBool("hapticsEnabled", _hapticsEnabled);
@@ -222,14 +219,19 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
   Future<void> _playCompletionSound() async {
     if (!_soundEnabled) return;
     try {
-      // Try to play the bell sound
+      // Stop the player first to ensure clean state
+      await _bellPlayer.stop();
+      // Seek to beginning
       await _bellPlayer.seek(Duration.zero);
+      // Play the bell sound
       await _bellPlayer.play();
     } catch (e) {
       // If playing fails, try to reload and play
       try {
+        await _bellPlayer.stop();
         await _bellPlayer.setAudioSource(AudioSource.asset("assets/sounds/Bell.mp3"));
         await _bellPlayer.setVolume(_volume);
+        await _bellPlayer.seek(Duration.zero);
         await _bellPlayer.play();
       } catch (_) {
         // Silently fail if sound playback fails
@@ -255,11 +257,19 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
         _totalMantras++;
         if (_currentCount >= _targetCount) {
           _isCompleted = true;
-          _showCompletionSheet();
-          // Play completion sound once
-          _playCompletionSound();
         }
       });
+      
+      // Show completion sheet and play sound AFTER setState completes
+      if (willComplete) {
+        // Use WidgetsBinding to ensure the UI is ready
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showCompletionSheet();
+            _playCompletionSound();
+          }
+        });
+      }
       
       // Haptic feedback and sound/vibration
       if (willComplete) {
@@ -301,86 +311,108 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
       context: context,
       backgroundColor: const Color(0xFF2A2C48),
       isDismissible: true,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.emoji_events, color: Color(0xFFD6A54B), size: 32),
-                  const SizedBox(width: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.emoji_events, color: Color(0xFFD6A54B), size: 32),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Session Complete",
+                          style: Theme.of(ctx).textTheme.displayMedium?.copyWith(color: const Color(0xFFD6A54B)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   Text(
-                    "Session Complete",
-                    style: Theme.of(ctx).textTheme.displayMedium?.copyWith(color: const Color(0xFFD6A54B)),
+                    "You reached $_targetCount mantras.",
+                    style: Theme.of(ctx).textTheme.bodyLarge,
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Total mantras: $_totalMantras",
+                    style: Theme.of(ctx).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            _stopCompletionSoundLoop();
+                            Navigator.of(ctx).pop();
+                            _resetCounter();
+                          },
+                          icon: const Icon(Icons.restart_alt, size: 22),
+                          label: const Text("Reset", style: TextStyle(fontSize: 15)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (_targetCount < _defaultTarget)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _stopCompletionSoundLoop();
+                              Navigator.of(ctx).pop();
+                              // Increase target to next preset or +10%
+                              final presetsSorted = [...presets]..sort();
+                              int next = _targetCount;
+                              for (final p in presetsSorted) {
+                                if (p > _targetCount) { next = p; break; }
+                              }
+                              if (next == _targetCount) {
+                                next = (_targetCount * 1.1).round();
+                              }
+                              _setTarget(next);
+                            },
+                            icon: const Icon(Icons.trending_up, size: 22),
+                            label: const Text("Increase", style: TextStyle(fontSize: 15)),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      if (_targetCount >= _defaultTarget)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              _stopCompletionSoundLoop();
+                              Navigator.of(ctx).pop();
+                            },
+                            icon: const Icon(Icons.close, size: 22),
+                            label: const Text("Done", style: TextStyle(fontSize: 15)),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                "You reached $_targetCount mantras.",
-                style: Theme.of(ctx).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Total mantras: $_totalMantras",
-                style: Theme.of(ctx).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        _stopCompletionSoundLoop();
-                        Navigator.of(ctx).pop();
-                        _resetCounter();
-                      },
-                      icon: const Icon(Icons.restart_alt, size: 24),
-                      label: const Text("Reset"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  if (_targetCount < _defaultTarget)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _stopCompletionSoundLoop();
-                          Navigator.of(ctx).pop();
-                          // Increase target to next preset or +10%
-                          final presetsSorted = [...presets]..sort();
-                          int next = _targetCount;
-                          for (final p in presetsSorted) {
-                            if (p > _targetCount) { next = p; break; }
-                          }
-                          if (next == _targetCount) {
-                            next = (_targetCount * 1.1).round();
-                          }
-                          _setTarget(next);
-                        },
-                        icon: const Icon(Icons.trending_up, size: 24),
-                        label: const Text("Increase Target"),
-                      ),
-                    ),
-                  if (_targetCount >= _defaultTarget)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _stopCompletionSoundLoop();
-                          Navigator.of(ctx).pop();
-                        },
-                        icon: const Icon(Icons.close, size: 24),
-                        label: const Text("Done"),
-                      ),
-                    ),
-                ],
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -461,10 +493,8 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
                       _hapticsEnabled = s.hapticsEnabled;
                       _tapAnywhere = s.tapAnywhere;
                       _defaultTarget = s.defaultTarget;
-                      // If session not started, apply default target immediately
-                      if (_currentCount == 0) {
-                        _targetCount = _defaultTarget;
-                      }
+                      // Always update target count to reflect new default
+                      _targetCount = _defaultTarget;
                     });
                     try {
                       await _tapPlayer.setVolume(_volume);
@@ -1029,50 +1059,113 @@ class _MantraMalaHomeState extends State<MantraMalaHome> {
         height: screenWidth * 0.5,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+          gradient: const RadialGradient(
+            center: Alignment.topLeft,
+            radius: 1.2,
             colors: [
-              Color(0xFF2A2C48),
-              Color(0xFF1F2131),
+              Color(0xFF3A3A3A),
+              Color(0xFF1C1C1C),
+              Color(0xFF0A0A0A),
             ],
+            stops: [0.0, 0.5, 1.0],
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF000000).withValues(alpha: 0.6),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-              spreadRadius: 2,
+              color: const Color(0xFF000000).withValues(alpha: 0.8),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+              spreadRadius: 4,
             ),
             BoxShadow(
-              color: const Color(0xFF000000).withValues(alpha: 0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: const Color(0xFFFFD96A).withValues(alpha: 0.15),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+              spreadRadius: 2,
             ),
           ],
           border: Border.all(
-            color: const Color(0xFF3A3C4E).withValues(alpha: 0.6),
-            width: 1.5,
+            color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+            width: 2.5,
           ),
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              if (_isCompleted) _stopCompletionSoundLoop();
-              _resetCounter();
-            },
-            borderRadius: BorderRadius.circular(screenWidth / 2),
-            splashColor: Colors.white.withValues(alpha: 0.2),
-            highlightColor: Colors.white.withValues(alpha: 0.1),
-            child: const Center(
-              child: Icon(
-                Icons.refresh,
-                size: 24,
-                color: Color(0xFFF8F5F0),
+        child: Stack(
+          children: [
+            // Metallic rim highlight
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFFFFD96A).withValues(alpha: 0.2),
+                      Colors.transparent,
+                      const Color(0xFFFFD96A).withValues(alpha: 0.1),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
+                  ),
+                ),
               ),
             ),
-          ),
+            // Glass shine overlay
+            Positioned(
+              top: screenWidth * 0.05,
+              left: screenWidth * 0.05,
+              right: screenWidth * 0.2,
+              height: screenWidth * 0.08,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(screenWidth * 0.2),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFFFFFFF).withValues(alpha: 0.25),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Button content
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  if (_isCompleted) _stopCompletionSoundLoop();
+                  _resetCounter();
+                },
+                borderRadius: BorderRadius.circular(screenWidth / 2),
+                splashColor: const Color(0xFFFFD96A).withValues(alpha: 0.2),
+                highlightColor: const Color(0xFFFFD96A).withValues(alpha: 0.1),
+                child: Center(
+                  child: Text(
+                    "RESET",
+                    style: TextStyle(
+                      fontSize: screenWidth * 0.055,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFFFFD96A),
+                      letterSpacing: 2.5,
+                      shadows: [
+                        Shadow(
+                          color: const Color(0xFFFFD96A).withValues(alpha: 0.8),
+                          blurRadius: 20,
+                        ),
+                        Shadow(
+                          color: const Color(0xFFFFD96A).withValues(alpha: 0.5),
+                          blurRadius: 10,
+                        ),
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          offset: const Offset(0, 2),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1166,25 +1259,26 @@ class _SettingsPageState extends State<SettingsPage> {
     // Cap at 1008 and ensure minimum is 1
     final cappedTarget = newTarget > 1008 ? 1008 : (newTarget == 0 ? 1 : newTarget);
     setState(() => _defaultTarget = cappedTarget);
+    _autoSave();
+  }
+
+  void _autoSave() {
+    widget.onChanged(SettingsData(
+      volume: _volume,
+      soundEnabled: _soundEnabled,
+      hapticsEnabled: _hapticsEnabled,
+      tapAnywhere: _tapAnywhere,
+      defaultTarget: _defaultTarget,
+    ));
   }
 
   Widget _buildNumberWheel(FixedExtentScrollController controller, String label, {int maxDigit = 9}) {
     final digitCount = maxDigit + 1;
     return Column(
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 5,
-            color: Color(0xFFA0A0A8),
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
-        ),
-        const SizedBox(height: 4),
         Container(
-          height: 67,
-          width: 34,
+          height: 82,
+          width: 44,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               colors: [Color(0xFF2A2C48), Color(0xFF1F2131)],
@@ -1209,7 +1303,7 @@ class _SettingsPageState extends State<SettingsPage> {
               // Selection highlight in center
               Center(
                 child: Container(
-                  height: 22,
+                  height: 37,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -1227,7 +1321,7 @@ class _SettingsPageState extends State<SettingsPage> {
               // Number wheel
               ListWheelScrollView.useDelegate(
                 controller: controller,
-                itemExtent: 22,
+                itemExtent: 37,
                 diameterRatio: 1.5,
                 physics: const FixedExtentScrollPhysics(),
                 perspective: 0.003,
@@ -1238,7 +1332,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Text(
                         index.toString(),
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 18,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFFFFD96A),
                           height: 1.0,
@@ -1266,43 +1360,6 @@ class _SettingsPageState extends State<SettingsPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFFD96A), Color(0xFFD6A54B), Color(0xFFB8873D)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD96A).withValues(alpha: 0.4),
-                      blurRadius: 15,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  "Set Your Target",
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: const Color(0xFF1C1E3A),
-                    letterSpacing: 1.5,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        offset: const Offset(0, 2),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
             Center(
               child: Text(
                 "Scroll the wheels to set your daily target",
@@ -1378,13 +1435,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         _buildNumberWheel(_onesController, "1s", maxDigit: 8),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 12),
                     Text(
                       "Scroll to select target (1-1008)",
                       style: TextStyle(
-                        fontSize: 6,
-                        color: const Color(0xFFA0A0A8).withValues(alpha: 0.7),
+                        fontSize: 12,
+                        color: const Color(0xFFA0A0A8).withValues(alpha: 0.9),
                         fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -1393,82 +1451,81 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 24),
             Row(children: [
-              Switch(value: _soundEnabled, onChanged: (v) => setState(() => _soundEnabled = v)),
+              Switch(value: _soundEnabled, onChanged: (v) {
+                setState(() => _soundEnabled = v);
+                _autoSave();
+              }),
               const SizedBox(width: 8),
               const Text("Enable Sound"),
             ]),
             Row(children: [
-              Switch(value: _tapAnywhere, onChanged: (v) => setState(() => _tapAnywhere = v)),
+              Switch(value: _tapAnywhere, onChanged: (v) {
+                setState(() => _tapAnywhere = v);
+                _autoSave();
+              }),
               const SizedBox(width: 8),
               const Text("Tap Anywhere to Count"),
             ]),
-            const SizedBox(height: 20),
-            // Donation Button (UPI for India, Ko-fi for International)
-            Center(
-              child: Builder(
-                builder: (context) {
-                  final isIndianUser = Localizations.localeOf(context).countryCode == 'IN';
-                  
-                  return Container(
-                    width: MediaQuery.of(context).size.width * 0.85,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+            const SizedBox(height: 12),
+            // Reset Total Count Button
+            Row(children: [
+              Switch(
+                value: false,
+                onChanged: (v) async {
+                  // Show confirmation dialog
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF2A2C48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF4A90E2).withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                      title: const Text(
+                        "Reset Total Count?",
+                        style: TextStyle(color: Color(0xFFFFD96A)),
+                      ),
+                      content: Text(
+                        "This will reset your lifetime mantra count to 0. This action cannot be undone.",
+                        style: TextStyle(
+                          color: const Color(0xFFF8F5F0).withValues(alpha: 0.9),
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text(
+                            "Cancel",
+                            style: TextStyle(color: Color(0xFFA0A0A8)),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFD96A),
+                            foregroundColor: const Color(0xFF1C1E3A),
+                          ),
+                          child: const Text("Reset"),
                         ),
                       ],
                     ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () async {
-                          if (isIndianUser) {
-                            // UPI Payment for Indian users
-                            // Replace with your UPI ID: yourname@paytm / yourname@okaxis / yourphone@ybl
-                            final upiUrl = Uri.parse('upi://pay?pa=6472084641@icici&pn=MantraMala&cu=INR');
-                            if (await canLaunchUrl(upiUrl)) {
-                              await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
-                            }
-                          } else {
-                            // Ko-fi for International users
-                            // Replace with your Ko-fi username
-                            final kofiUrl = Uri.parse('https://ko-fi.com/mantramala');
-                            if (await canLaunchUrl(kofiUrl)) {
-                              await launchUrl(kofiUrl, mode: LaunchMode.externalApplication);
-                            }
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.volunteer_activism, size: 22, color: Color(0xFFFF4444)),
-                            SizedBox(width: 10),
-                            Text(
-                              "Support Us to Build Better",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   );
+
+                  if (confirmed == true) {
+                    await widget.onResetTotalMantras();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Total mantras count has been reset"),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
                 },
               ),
-            ),
+              const SizedBox(width: 8),
+              const Text("Reset Total Count"),
+            ]),
             const SizedBox(height: 16),
             Text("Volume", style: Theme.of(context).textTheme.bodyLarge),
             Slider(
@@ -1477,135 +1534,520 @@ class _SettingsPageState extends State<SettingsPage> {
               max: 1.0,
               divisions: 10,
               label: (_volume * 100).round().toString(),
-              onChanged: (v) => setState(() => _volume = v),
+              onChanged: (v) {
+                setState(() => _volume = v);
+                _autoSave();
+              },
             ),
-            const SizedBox(height: 24),
-            // Save Button
+            const SizedBox(height: 12),
             Center(
+              child: Text(
+                "Settings are saved automatically",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: const Color(0xFFA0A0A8).withValues(alpha: 0.8),
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Support & Contributions Handle
+            GestureDetector(
+              onTap: () => _showSupportBottomSheet(context),
+              onVerticalDragEnd: (details) {
+                if (details.primaryVelocity! < 0) {
+                  _showSupportBottomSheet(context);
+                }
+              },
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.85,
-                height: 56,
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
                   gradient: const LinearGradient(
-                    colors: [Color(0xFFD6A54B), Color(0xFFB8873D)],
+                    colors: [Color(0xFF2A2C48), Color(0xFF1F2131)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+                    width: 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFD6A54B).withValues(alpha: 0.3),
+                      color: const Color(0xFFFFD96A).withValues(alpha: 0.2),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () async {
-                      // Capture context-bound objects before awaiting
-                      final nav = Navigator.of(context);
-                      await widget.onChanged(SettingsData(
-                        volume: _volume,
-                        soundEnabled: _soundEnabled,
-                        hapticsEnabled: _hapticsEnabled,
-                        tapAnywhere: _tapAnywhere,
-                        defaultTarget: _defaultTarget,
-                      ));
-                      if (mounted) nav.pop();
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.check_circle, size: 24, color: Color(0xFF1C1E3A)),
-                        SizedBox(width: 8),
-                        Text(
-                          "Save Settings",
-                          style: TextStyle(
-                            color: Color(0xFF1C1E3A),
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Reset Actions Section
-            Center(
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2A2C48),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF3A3C4E), width: 1),
-                ),
-                child: Column(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "Reset Actions",
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: const Color(0xFFA0A0A8),
+                    const Icon(Icons.keyboard_arrow_up, color: Color(0xFFFFD96A), size: 24),
+                    const Text(
+                      "Support & Contributions",
+                      style: TextStyle(
+                        color: Color(0xFFFFD96A),
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // Reset Total Mantras Button
-                    Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: const Color(0xFF3A3C4E),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () async {
-                            // Capture messenger before awaiting
-                            final messenger = ScaffoldMessenger.of(context);
-                            await widget.onResetTotalMantras();
-                            if (mounted) {
-                              messenger.showSnackBar(
-                                const SnackBar(content: Text("Total mantras reset")),
-                              );
-                            }
-                          },
-                          borderRadius: BorderRadius.circular(12),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.delete_sweep, size: 22, color: Color(0xFFF8F5F0)),
-                              SizedBox(width: 8),
-                              Text(
-                                "Reset Total Mantras",
-                                style: TextStyle(
-                                  color: Color(0xFFF8F5F0),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                    const Icon(Icons.keyboard_arrow_up, color: Color(0xFFFFD96A), size: 24),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
           ],
         ),
       ),
     ),
     );
   }
+
+  void _showSupportBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF1C1E3A), Color(0xFF252745)],
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFFD96A).withValues(alpha: 0.1),
+              blurRadius: 30,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Ram Mandir Temple Background
+            Positioned.fill(
+              child: CustomPaint(
+                painter: HimalayanTemplePainter(),
+              ),
+            ),
+            // Content overlay
+            SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Drag handle
+                    Container(
+                      width: 50,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    // Title with gaming-quality text
+                    Text(
+                      "Support the Journey 🙏",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFFFFD96A),
+                        letterSpacing: 1.2,
+                        shadows: [
+                          Shadow(
+                            color: const Color(0xFFFFD96A).withValues(alpha: 0.8),
+                            blurRadius: 20,
+                          ),
+                          Shadow(
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.6),
+                            offset: const Offset(0, 3),
+                            blurRadius: 10,
+                          ),
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            offset: const Offset(0, 4),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Body text with enhanced styling
+                    Text(
+                      "Your contribution helps us maintain and improve MantraMala, keeping it free and ad-free for everyone. Every donation, big or small, supports our mission to provide a peaceful spiritual practice tool.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFF8F5F0).withValues(alpha: 0.95),
+                        height: 1.6,
+                        letterSpacing: 0.3,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            offset: const Offset(0, 1),
+                            blurRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 36),
+                    // India UPI Button with premium styling
+                    _buildPremiumDonationButton(
+                      context: context,
+                      title: "Support from India 🇮🇳",
+                      emoji: "",
+                      onTap: () async {
+                        final upiUrl = Uri.parse('upi://pay?pa=6472084641@icici&pn=MantraMala&cu=INR');
+                        try {
+                          await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
+                        } catch (e) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('No UPI app found. Please install Google Pay, PhonePe, or Paytm.'),
+                              duration: Duration(seconds: 4),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    // Worldwide Ko-fi Button with premium styling
+                    _buildPremiumDonationButton(
+                      context: context,
+                      title: "Support from Worldwide 🌍",
+                      emoji: "",
+                      onTap: () async {
+                        final kofiUrl = Uri.parse('https://ko-fi.com/mantramala');
+                        try {
+                          final result = await launchUrl(kofiUrl, mode: LaunchMode.externalApplication);
+                          if (!result) {
+                            throw Exception('Failed to launch URL');
+                          }
+                        } catch (e) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Cannot open browser. Please try again later.'),
+                              duration: Duration(seconds: 4),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 32),
+                    // Footer text with enhanced styling
+                    Text(
+                      "Thank you for being part of this spiritual journey! 🙏✨",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFA0A0A8).withValues(alpha: 0.9),
+                        letterSpacing: 0.4,
+                        height: 1.4,
+                        shadows: [
+                          Shadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            offset: const Offset(0, 1),
+                            blurRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumDonationButton({
+    required BuildContext context,
+    required String title,
+    required String emoji,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      height: 64,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF3A3A3A), Color(0xFF1C1C1C), Color(0xFF0A0A0A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+            spreadRadius: 2,
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: const Color(0xFFFFD96A).withValues(alpha: 0.4),
+          width: 2,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          splashColor: const Color(0xFFFFD96A).withValues(alpha: 0.2),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  emoji,
+                  style: const TextStyle(fontSize: 28),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFFFD96A),
+                    letterSpacing: 0.8,
+                    shadows: [
+                      Shadow(
+                        color: const Color(0xFFFFD96A).withValues(alpha: 0.6),
+                        blurRadius: 10,
+                      ),
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        offset: const Offset(0, 2),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HimalayanTemplePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final basePaint = Paint()
+      ..color = const Color(0xFFFFD96A).withValues(alpha: 0.06)
+      ..style = PaintingStyle.fill;
+
+    final outlinePaint = Paint()
+      ..color = const Color(0xFFFFD96A).withValues(alpha: 0.10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    final width = size.width;
+    final height = size.height;
+    final centerX = width / 2;
+
+    // 1. Grand stepped platform (bottom foundation)
+    final platformWidth = width * 0.35;
+    final platformHeight = height * 0.03;
+    final platformY = height * 0.80;
+    
+    for (int i = 0; i < 3; i++) {
+      final stepWidth = platformWidth + (i * width * 0.04);
+      final stepY = platformY + (i * platformHeight);
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(centerX, stepY),
+          width: stepWidth,
+          height: platformHeight,
+        ),
+        basePaint,
+      );
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(centerX, stepY),
+          width: stepWidth,
+          height: platformHeight,
+        ),
+        outlinePaint,
+      );
+    }
+
+    // 2. Main temple base (rectangular foundation)
+    final baseWidth = width * 0.50;
+    final baseHeight = height * 0.20;
+    final baseY = platformY - baseHeight;
+    
+    canvas.drawRect(
+      Rect.fromLTWH(centerX - baseWidth / 2, baseY, baseWidth, baseHeight),
+      basePaint,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(centerX - baseWidth / 2, baseY, baseWidth, baseHeight),
+      outlinePaint,
+    );
+
+    // 3. Five colonnade pillars
+    final pillarWidth = width * 0.03;
+    final pillarHeight = height * 0.10;
+    final pillarSpacing = width * 0.10;
+    final pillarY = baseY;
+    
+    for (int i = -2; i <= 2; i++) {
+      final pillarX = centerX + (i * pillarSpacing) - pillarWidth / 2;
+      canvas.drawRect(
+        Rect.fromLTWH(pillarX, pillarY, pillarWidth, pillarHeight),
+        basePaint,
+      );
+      canvas.drawRect(
+        Rect.fromLTWH(pillarX, pillarY, pillarWidth, pillarHeight),
+        outlinePaint,
+      );
+    }
+
+    // 4. Three-tiered shikhara (tapering tower)
+    final tier1Width = width * 0.18;
+    final tier1Height = height * 0.08;
+    final tier1Y = baseY - tier1Height;
+    
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(centerX, tier1Y),
+        width: tier1Width,
+        height: tier1Height,
+      ),
+      basePaint,
+    );
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(centerX, tier1Y),
+        width: tier1Width,
+        height: tier1Height,
+      ),
+      outlinePaint,
+    );
+
+    final tier2Width = width * 0.12;
+    final tier2Height = height * 0.06;
+    final tier2Y = tier1Y - tier2Height;
+    
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(centerX, tier2Y),
+        width: tier2Width,
+        height: tier2Height,
+      ),
+      basePaint,
+    );
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(centerX, tier2Y),
+        width: tier2Width,
+        height: tier2Height,
+      ),
+      outlinePaint,
+    );
+
+    final tier3Width = width * 0.08;
+    final tier3Height = height * 0.05;
+    final tier3Y = tier2Y - tier3Height;
+    
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(centerX, tier3Y),
+        width: tier3Width,
+        height: tier3Height,
+      ),
+      basePaint,
+    );
+    canvas.drawRect(
+      Rect.fromCenter(
+        center: Offset(centerX, tier3Y),
+        width: tier3Width,
+        height: tier3Height,
+      ),
+      outlinePaint,
+    );
+
+    // 5. Central spire (triangular peak)
+    final spireWidth = width * 0.04;
+    final spireHeight = height * 0.06;
+    final spireY = tier3Y - tier3Height / 2;
+    
+    final spirePath = Path()
+      ..moveTo(centerX, spireY - spireHeight)
+      ..lineTo(centerX - spireWidth / 2, spireY)
+      ..lineTo(centerX + spireWidth / 2, spireY)
+      ..close();
+    
+    canvas.drawPath(spirePath, basePaint);
+    canvas.drawPath(spirePath, outlinePaint);
+
+    // 6. Kalash dome (circular ornament)
+    final kalashRadius = width * 0.015;
+    final kalashY = spireY - spireHeight;
+    
+    canvas.drawCircle(
+      Offset(centerX, kalashY),
+      kalashRadius,
+      basePaint,
+    );
+    canvas.drawCircle(
+      Offset(centerX, kalashY),
+      kalashRadius,
+      outlinePaint,
+    );
+
+    // 7. Flag pole (vertical line)
+    final flagPoleHeight = height * 0.06;
+    final flagPoleY = kalashY - kalashRadius;
+    
+    canvas.drawLine(
+      Offset(centerX, flagPoleY),
+      Offset(centerX, flagPoleY - flagPoleHeight),
+      outlinePaint,
+    );
+
+    // 8. Triangular flag at top
+    final flagWidth = width * 0.025;
+    final flagHeight = height * 0.02;
+    final flagY = flagPoleY - flagPoleHeight;
+    
+    final flagPath = Path()
+      ..moveTo(centerX, flagY)
+      ..lineTo(centerX + flagWidth, flagY + flagHeight / 2)
+      ..lineTo(centerX, flagY + flagHeight)
+      ..close();
+    
+    canvas.drawPath(flagPath, basePaint);
+    canvas.drawPath(flagPath, outlinePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class CircleProgressPainter extends CustomPainter {

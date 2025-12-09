@@ -1,0 +1,45 @@
+﻿Folder PATH listing for volume Windows
+Volume serial number is 7603-B42A
+C:\USERS\VINSI\ONEDRIVE\DOCUMENTS\MOBILEPROJECT\MOBILEPROJECT_FLUTTER\TRYING_FLUTTER\FINAL_RELEASE_V1.0.5
+ª   .flutter-plugins-dependencies
+ª   app-release-v1.0.5.aab
+ª   app-release-v1.0.5.apk
+ª   BUILD_SUMMARY.md
+ª   FINAL_PACKAGE_README.md
+ª   key.properties
+ª   main.dart
+ª   NEXT_STEPS.md
+ª   PACKAGE_CONTENTS.txt
+ª   PLAY_STORE_RELEASE_NOTES.md
+ª   PLAY_STORE_SUBMISSION.md
+ª   PRIVACY_POLICY.md
+ª   pubspec.lock
+ª   pubspec.yaml
+ª   README.md
+ª   RELEASE_CHECKLIST.md
+ª   RELEASE_NOTES.md
+ª   RELEASE_SIGNING.md
+ª   START_HERE.txt
+ª   UPLOAD_INSTRUCTIONS.md
+ª   
++---.dart_tool
+ª       package_config.json
+ª       package_graph.json
+ª       version
+ª       
++---assets
+    +---logo
+    ª       logo.png
+    ª       
+    +---screenshots and images
+    ª       Completion screen.png
+    ª       Feature graphic (1024x500px).png
+    ª       Home-Screen.png
+    ª       logo.png
+    ª       Settings-Screen.png
+    ª       Success message.png
+    ª       
+    +---sounds
+            Bell.mp3
+            tab.mp3
+            
