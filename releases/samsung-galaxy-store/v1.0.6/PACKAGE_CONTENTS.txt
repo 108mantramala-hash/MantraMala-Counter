@@ -1,0 +1,60 @@
+========================================
+Samsung Galaxy Store Submission Package
+MantraMala v1.0.6
+Package Created: December 9, 2025
+========================================
+
+✅ PACKAGE CONTENTS CHECKLIST
+
+📦 App Binaries (app-bundle/)
+  ✅ app-release-v1.0.6.aab (45.2 MB) - Primary submission file
+  ✅ app-release-v1.0.6.apk (51.1 MB) - For testing
+
+📸 Screenshots (screenshots/)
+  ✅ Home-Screen.png (130 KB)
+  ✅ Completion screen.png (135 KB)
+  ✅ Settings-Screen.png (76 KB)
+  ✅ Success message.png (100 KB)
+  ✅ Feature graphic (1024x500px).png (1.5 MB)
+
+🎨 Graphics (graphics/)
+  ✅ logo.png (1.67 MB)
+
+📄 Documentation
+  ✅ README.md - Quick start guide
+  ✅ SAMSUNG_GALAXY_STORE_LISTING.md - Store listing content (copy-paste ready)
+  ✅ SAMSUNG_RELEASE_NOTES_v1.0.6.md - Detailed release notes
+  ✅ SUBMISSION_GUIDE.md - Step-by-step submission instructions
+  ✅ PRIVACY_POLICY.md - Privacy policy
+  ✅ RELEASE_SIGNING.md - Signing information
+
+========================================
+NEXT STEPS
+========================================
+
+1. Register at Samsung Seller Portal
+   https://seller.samsungapps.com/
+
+2. Review SUBMISSION_GUIDE.md for detailed steps
+
+3. Open SAMSUNG_GALAXY_STORE_LISTING.md for store listing content
+
+4. Upload app-release-v1.0.6.aab from app-bundle/
+
+5. Add screenshots from screenshots/ folder
+
+6. Submit for review
+
+========================================
+IMPORTANT NOTES
+========================================
+
+✓ Package Name: com.mantramala.app
+✓ Version: 1.0.6 (Build 7)
+✓ Privacy Policy: https://sites.google.com/view/mantramala-privacy/
+✓ Signed with: upload-keystore.jks (same as Play Store)
+✓ Category: Lifestyle
+✓ Content Rating: Everyone
+✓ Free app, no ads
+
+========================================
