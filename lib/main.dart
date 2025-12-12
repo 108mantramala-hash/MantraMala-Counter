@@ -1355,20 +1355,18 @@ class _SettingsPageState extends State<SettingsPage> {
       appBar: AppBar(title: const Text("Settings")),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-            Center(
-              child: ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ).createShader(bounds);
-                },
+              // Gold-gradient headline
+              ShaderMask(
+                shaderCallback: (Rect bounds) => const LinearGradient(
+                  colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ).createShader(bounds),
                 child: const Text(
                   "Scroll the wheels to set your daily target",
                   style: TextStyle(
@@ -1378,14 +1376,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     color: Colors.white,
                     letterSpacing: 0.2,
                   ),
+                  textAlign: TextAlign.center,
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            // Rolling Number Picker (Slot Machine Style)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+              const SizedBox(height: 14),
+              // Target picker
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF262835), Color(0xFF1A1C2E)],
@@ -1399,12 +1396,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFFD96A).withValues(alpha: 0.15),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: const Color(0xFFFFD96A).withValues(alpha: 0.10),
                       blurRadius: 7,
                       offset: const Offset(0, 2),
                     ),
@@ -1412,44 +1404,42 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 child: Column(
                   children: [
-                    // Current Target Display
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+                      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 8),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFFFFD96A), Color(0xFFD6A54B)],
                         ),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
                         _defaultTarget.toString().padLeft(4, '0'),
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF1C1E3A),
-                          letterSpacing: 4,
+                          letterSpacing: 3,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    // Rolling Number Wheels
+                    const SizedBox(height: 7),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _buildNumberWheel(_thousandsController, "1000s", maxDigit: 1),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 3),
                         _buildNumberWheel(_hundredsController, "100s"),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 3),
                         _buildNumberWheel(_tensController, "10s"),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 3),
                         _buildNumberWheel(_onesController, "1s", maxDigit: 8),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 7),
                     Text(
                       "Scroll to select target (1-1008)",
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: const Color(0xFFA0A0A8).withValues(alpha: 0.9),
                         fontStyle: FontStyle.italic,
                         fontWeight: FontWeight.w500,
@@ -1458,359 +1448,365 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(children: [
-              Switch(value: _soundEnabled, onChanged: (v) {
-                setState(() => _soundEnabled = v);
-                _autoSave();
-              }),
-              const SizedBox(width: 8),
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ).createShader(bounds);
-                },
-                child: const Text(
-                  "Enable Sound",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Montserrat',
-                    color: Colors.white,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-            ]),
-            Row(children: [
-              Switch(value: _tapAnywhere, onChanged: (v) {
-                setState(() => _tapAnywhere = v);
-                _autoSave();
-              }),
-              const SizedBox(width: 8),
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ).createShader(bounds);
-                },
-                child: const Text(
-                  "Tap Anywhere to Count",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Montserrat',
-                    color: Colors.white,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 12),
-            // Reset Total Count Button
-            Row(children: [
-              Switch(
-                value: false,
-                onChanged: (v) async {
-                  // ...existing code...
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF2A2C48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      title: ShaderMask(
-                        shaderCallback: (Rect bounds) {
-                          return const LinearGradient(
-                            colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ).createShader(bounds);
-                        },
-                        child: const Text(
-                          "Reset Total Count?",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'Montserrat',
-                            color: Colors.white,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                      content: ShaderMask(
-                        shaderCallback: (Rect bounds) {
-                          return const LinearGradient(
-                            colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ).createShader(bounds);
-                        },
-                        child: const Text(
-                          "This will reset your lifetime mantra count to 0. This action cannot be undone.",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'Montserrat',
-                            color: Colors.white,
-                            letterSpacing: 0.1,
-                          ),
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text(
-                            "Cancel",
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'Montserrat',
-                              color: Colors.black,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.of(context).pop(true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFD6A54B),
-                            foregroundColor: Colors.black,
-                            textStyle: const TextStyle(
-                              fontFamily: 'Montserrat',
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              letterSpacing: 0.2,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            "Reset",
-                            style: TextStyle(
-                              fontFamily: 'Montserrat',
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.black,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirmed == true) {
-                    await widget.onResetTotalMantras();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: const Color(0xFF2A2C48),
-                          content: ShaderMask(
-                            shaderCallback: (Rect bounds) {
-                              return const LinearGradient(
-                                colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ).createShader(bounds);
-                            },
-                            child: const Text(
-                              "Total mantras count has been reset",
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Montserrat',
-                                color: Colors.white,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 6,
-                        ),
-                      );
-                    }
-                  }
-                },
-              ),
-              const SizedBox(width: 8),
-              ShaderMask(
-                shaderCallback: (Rect bounds) {
-                  return const LinearGradient(
-                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ).createShader(bounds);
-                },
-                child: const Text(
-                  "Reset Total Count",
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Montserrat',
-                    color: Colors.white,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF23243A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  width: 1.5,
-                  color: const Color(0xFFD6A54B),
-                ),
-              ),
-              child: Row(
+              const SizedBox(height: 18),
+              // Settings toggles
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ShaderMask(
-                    shaderCallback: (Rect bounds) {
-                      return const LinearGradient(
+                  _buildSettingsRow(
+                    context,
+                    label: "Enable Sound",
+                    value: _soundEnabled,
+                    onChanged: (v) { setState(() => _soundEnabled = v); _autoSave(); },
+                  ),
+                  _buildSettingsRow(
+                    context,
+                    label: "Tap Anywhere to Count",
+                    value: _tapAnywhere,
+                    onChanged: (v) { setState(() => _tapAnywhere = v); _autoSave(); },
+                  ),
+                  const SizedBox(height: 2),
+                  _buildResetRow(context),
+                ],
+              ),
+              const SizedBox(height: 14),
+              // Volume bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF23243A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    width: 1.2,
+                    color: const Color(0xFFD6A54B),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (Rect bounds) => const LinearGradient(
                         colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                      ).createShader(bounds);
-                    },
+                      ).createShader(bounds),
+                      child: const Text(
+                        "Volume",
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Montserrat',
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 4,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                          activeTrackColor: const Color(0xFFD6A54B),
+                          inactiveTrackColor: const Color(0xFFD6A54B).withOpacity(0.22),
+                          thumbColor: const Color(0xFFFFD96A),
+                          overlayColor: const Color(0xFFD6A54B).withOpacity(0.13),
+                        ),
+                        child: Slider(
+                          value: _volume,
+                          min: 0.0,
+                          max: 1.0,
+                          divisions: 10,
+                          onChanged: (v) { setState(() => _volume = v); _autoSave(); },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ShaderMask(
+                      shaderCallback: (Rect bounds) => const LinearGradient(
+                        colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds),
+                      child: Text(
+                        "${(_volume * 100).round()}%",
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Montserrat',
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Center(
+                child: Text(
+                  "Settings are saved automatically",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: const Color(0xFFA0A0A8).withValues(alpha: 0.8),
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              // Support & Contributions Handle
+              GestureDetector(
+                onTap: () => _showSupportBottomSheet(context),
+                onVerticalDragEnd: (details) {
+                  if (details.primaryVelocity! < 0) {
+                    _showSupportBottomSheet(context);
+                  }
+                },
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.85,
+                  padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2A2C48), Color(0xFF1F2131)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFFD96A).withValues(alpha: 0.13),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Icon(Icons.keyboard_arrow_up, color: Color(0xFFFFD96A), size: 22),
+                      const Text(
+                        "Support & Contributions",
+                        style: TextStyle(
+                          color: Color(0xFFFFD96A),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Icon(Icons.keyboard_arrow_up, color: Color(0xFFFFD96A), size: 22),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsRow(BuildContext context, {required String label, required bool value, required ValueChanged<bool> onChanged}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: const Color(0xFFD6A54B),
+            inactiveThumbColor: const Color(0xFF44465A),
+            inactiveTrackColor: const Color(0xFF23243A),
+          ),
+          const SizedBox(width: 8),
+          ShaderMask(
+            shaderCallback: (Rect bounds) => const LinearGradient(
+              colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ).createShader(bounds),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Montserrat',
+                color: Colors.white,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResetRow(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Center(
+        child: GestureDetector(
+          onTap: () async {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: const Color(0xFF2A2C48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                title: ShaderMask(
+                  shaderCallback: (Rect bounds) => const LinearGradient(
+                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds),
+                  child: const Text(
+                    "Reset Total Count?",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Montserrat',
+                      color: Colors.white,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+                content: ShaderMask(
+                  shaderCallback: (Rect bounds) => const LinearGradient(
+                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds),
+                  child: const Text(
+                    "This will reset your lifetime mantra count to 0. This action cannot be undone.",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Montserrat',
+                      color: Colors.white,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
                     child: const Text(
-                      "Volume",
+                      "Cancel",
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         fontFamily: 'Montserrat',
-                        color: Colors.white,
+                        color: Colors.black,
                         letterSpacing: 0.2,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 4,
-                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                        activeTrackColor: const Color(0xFFD6A54B),
-                        inactiveTrackColor: const Color(0xFFD6A54B).withOpacity(0.25),
-                        thumbColor: const Color(0xFFFFD96A),
-                        overlayColor: const Color(0xFFD6A54B).withOpacity(0.15),
-                      ),
-                      child: Slider(
-                        value: _volume,
-                        min: 0.0,
-                        max: 1.0,
-                        divisions: 10,
-                        onChanged: (v) {
-                          setState(() => _volume = v);
-                          _autoSave();
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  ShaderMask(
-                    shaderCallback: (Rect bounds) {
-                      return const LinearGradient(
-                        colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(bounds);
-                    },
-                    child: Text(
-                      "${(_volume * 100).round()}%",
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD6A54B),
+                      foregroundColor: Colors.black,
+                      textStyle: const TextStyle(
                         fontFamily: 'Montserrat',
-                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        letterSpacing: 0.2,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      "Reset",
+                      style: TextStyle(
+                        fontFamily: 'Montserrat',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Colors.black,
                         letterSpacing: 0.2,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                "Settings are saved automatically",
-                style: TextStyle(
-                  fontSize: 13,
-                  color: const Color(0xFFA0A0A8).withValues(alpha: 0.8),
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-            // Support & Contributions Handle
-            GestureDetector(
-              onTap: () => _showSupportBottomSheet(context),
-              onVerticalDragEnd: (details) {
-                if (details.primaryVelocity! < 0) {
-                  _showSupportBottomSheet(context);
-                }
-              },
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2A2C48), Color(0xFF1F2131)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFFFD96A).withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD96A).withValues(alpha: 0.2),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Icon(Icons.keyboard_arrow_up, color: Color(0xFFFFD96A), size: 24),
-                    const Text(
-                      "Support & Contributions",
-                      style: TextStyle(
-                        color: Color(0xFFFFD96A),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+            );
+            if (confirmed == true) {
+              await widget.onResetTotalMantras();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: const Color(0xFF2A2C48),
+                    content: ShaderMask(
+                      shaderCallback: (Rect bounds) => const LinearGradient(
+                        colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds),
+                      child: const Text(
+                        "Total mantras count has been reset",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Montserrat',
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
                       ),
                     ),
-                    const Icon(Icons.keyboard_arrow_up, color: Color(0xFFFFD96A), size: 24),
-                  ],
-                ),
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 6,
+                  ),
+                );
+              }
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
               ),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD6A54B).withOpacity(0.13),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-            const SizedBox(height: 24),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.refresh, color: const Color(0xFF1C1E3A), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  "Reset Total Count",
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Montserrat',
+                    color: Color(0xFF1C1E3A),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-    ),
     );
   }
 
