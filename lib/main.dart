@@ -1361,13 +1361,23 @@ class _SettingsPageState extends State<SettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
             Center(
-              child: Text(
-                "Scroll the wheels to set your daily target",
-                style: TextStyle(
-                  fontSize: 13,
-                  color: const Color(0xFFA0A0A8).withValues(alpha: 0.9),
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w500,
+              child: ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return const LinearGradient(
+                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds);
+                },
+                child: const Text(
+                  "Scroll the wheels to set your daily target",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Montserrat',
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ),
@@ -1456,7 +1466,25 @@ class _SettingsPageState extends State<SettingsPage> {
                 _autoSave();
               }),
               const SizedBox(width: 8),
-              const Text("Enable Sound"),
+              ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return const LinearGradient(
+                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds);
+                },
+                child: const Text(
+                  "Enable Sound",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Montserrat',
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
             ]),
             Row(children: [
               Switch(value: _tapAnywhere, onChanged: (v) {
@@ -1464,7 +1492,25 @@ class _SettingsPageState extends State<SettingsPage> {
                 _autoSave();
               }),
               const SizedBox(width: 8),
-              const Text("Tap Anywhere to Count"),
+              ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return const LinearGradient(
+                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds);
+                },
+                child: const Text(
+                  "Tap Anywhere to Count",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Montserrat',
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
             ]),
             const SizedBox(height: 12),
             // Reset Total Count Button
@@ -1472,7 +1518,7 @@ class _SettingsPageState extends State<SettingsPage> {
               Switch(
                 value: false,
                 onChanged: (v) async {
-                  // Show confirmation dialog
+                  // ...existing code...
                   final confirmed = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
@@ -1524,10 +1570,46 @@ class _SettingsPageState extends State<SettingsPage> {
                 },
               ),
               const SizedBox(width: 8),
-              const Text("Reset Total Count"),
+              ShaderMask(
+                shaderCallback: (Rect bounds) {
+                  return const LinearGradient(
+                    colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ).createShader(bounds);
+                },
+                child: const Text(
+                  "Reset Total Count",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Montserrat',
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
             ]),
             const SizedBox(height: 16),
-            Text("Volume", style: Theme.of(context).textTheme.bodyLarge),
+            ShaderMask(
+              shaderCallback: (Rect bounds) {
+                return const LinearGradient(
+                  colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ).createShader(bounds);
+              },
+              child: const Text(
+                "Volume",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Montserrat',
+                  color: Colors.white,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
             Slider(
               value: _volume,
               min: 0.0,
@@ -1702,26 +1784,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     const SizedBox(height: 36),
-                    // India UPI Button with premium styling
-                    _buildPremiumDonationButton(
-                      context: context,
-                      title: "Support from India 🇮🇳",
-                      emoji: "",
-                      onTap: () async {
-                        final upiUrl = Uri.parse('upi://pay?pa=6472084641@icici&pn=MantraMala&cu=INR');
-                        try {
-                          await launchUrl(upiUrl, mode: LaunchMode.externalApplication);
-                        } catch (e) {
-                          Navigator.of(context).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('No UPI app found. Please install Google Pay, PhonePe, or Paytm.'),
-                              duration: Duration(seconds: 4),
-                            ),
-                          );
-                        }
-                      },
-                    ),
+                    // Only worldwide Ko-fi Button remains
                     const SizedBox(height: 20),
                     // Worldwide Ko-fi Button with premium styling
                     _buildPremiumDonationButton(
