@@ -1524,16 +1524,44 @@ class _SettingsPageState extends State<SettingsPage> {
                     builder: (context) => AlertDialog(
                       backgroundColor: const Color(0xFF2A2C48),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                      title: const Text(
-                        "Reset Total Count?",
-                        style: TextStyle(color: Color(0xFFFFD96A)),
+                      title: ShaderMask(
+                        shaderCallback: (Rect bounds) {
+                          return const LinearGradient(
+                            colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ).createShader(bounds);
+                        },
+                        child: const Text(
+                          "Reset Total Count?",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Montserrat',
+                            color: Colors.white,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
                       ),
-                      content: Text(
-                        "This will reset your lifetime mantra count to 0. This action cannot be undone.",
-                        style: TextStyle(
-                          color: const Color(0xFFF8F5F0).withValues(alpha: 0.9),
+                      content: ShaderMask(
+                        shaderCallback: (Rect bounds) {
+                          return const LinearGradient(
+                            colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ).createShader(bounds);
+                        },
+                        child: const Text(
+                          "This will reset your lifetime mantra count to 0. This action cannot be undone.",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Montserrat',
+                            color: Colors.white,
+                            letterSpacing: 0.1,
+                          ),
                         ),
                       ),
                       actions: [
@@ -1541,16 +1569,41 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () => Navigator.of(context).pop(false),
                           child: const Text(
                             "Cancel",
-                            style: TextStyle(color: Color(0xFFA0A0A8)),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Montserrat',
+                              color: Colors.black,
+                              letterSpacing: 0.2,
+                            ),
                           ),
                         ),
                         ElevatedButton(
                           onPressed: () => Navigator.of(context).pop(true),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFFFD96A),
-                            foregroundColor: const Color(0xFF1C1E3A),
+                            backgroundColor: const Color(0xFFD6A54B),
+                            foregroundColor: Colors.black,
+                            textStyle: const TextStyle(
+                              fontFamily: 'Montserrat',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              letterSpacing: 0.2,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 0,
                           ),
-                          child: const Text("Reset"),
+                          child: const Text(
+                            "Reset",
+                            style: TextStyle(
+                              fontFamily: 'Montserrat',
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.black,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1560,9 +1613,33 @@ class _SettingsPageState extends State<SettingsPage> {
                     await widget.onResetTotalMantras();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Total mantras count has been reset"),
-                          duration: Duration(seconds: 2),
+                        SnackBar(
+                          backgroundColor: const Color(0xFF2A2C48),
+                          content: ShaderMask(
+                            shaderCallback: (Rect bounds) {
+                              return const LinearGradient(
+                                colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ).createShader(bounds);
+                            },
+                            child: const Text(
+                              "Total mantras count has been reset",
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Montserrat',
+                                color: Colors.white,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 6,
                         ),
                       );
                     }
@@ -1591,35 +1668,83 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ]),
             const SizedBox(height: 16),
-            ShaderMask(
-              shaderCallback: (Rect bounds) {
-                return const LinearGradient(
-                  colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ).createShader(bounds);
-              },
-              child: const Text(
-                "Volume",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Montserrat',
-                  color: Colors.white,
-                  letterSpacing: 0.2,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF23243A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  width: 1.5,
+                  color: const Color(0xFFD6A54B),
                 ),
               ),
-            ),
-            Slider(
-              value: _volume,
-              min: 0.0,
-              max: 1.0,
-              divisions: 10,
-              label: (_volume * 100).round().toString(),
-              onChanged: (v) {
-                setState(() => _volume = v);
-                _autoSave();
-              },
+              child: Row(
+                children: [
+                  ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return const LinearGradient(
+                        colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds);
+                    },
+                    child: const Text(
+                      "Volume",
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Montserrat',
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 4,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                        activeTrackColor: const Color(0xFFD6A54B),
+                        inactiveTrackColor: const Color(0xFFD6A54B).withOpacity(0.25),
+                        thumbColor: const Color(0xFFFFD96A),
+                        overlayColor: const Color(0xFFD6A54B).withOpacity(0.15),
+                      ),
+                      child: Slider(
+                        value: _volume,
+                        min: 0.0,
+                        max: 1.0,
+                        divisions: 10,
+                        onChanged: (v) {
+                          setState(() => _volume = v);
+                          _autoSave();
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return const LinearGradient(
+                        colors: [Color(0xFFD6A54B), Color(0xFFFFD96A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds);
+                    },
+                    child: Text(
+                      "${(_volume * 100).round()}%",
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Montserrat',
+                        color: Colors.white,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             Center(
